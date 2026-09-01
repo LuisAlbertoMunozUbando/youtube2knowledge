@@ -9,6 +9,10 @@ __pycache__/
 node_modules/
 .next/
 out/
+tmp/
+output/pdf/*.aux
+output/pdf/*.log
+output/pdf/*.out
 coverage/
 *.tsbuildinfo
 .DS_Store

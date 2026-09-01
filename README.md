@@ -149,6 +149,10 @@ avoid CAS reconstruction failures while fetching model weights. Its DNS
 override is scoped to the LLM container so a host-level sinkhole response for
 `huggingface.co` cannot block model downloads or alter other Spark services.
 
+The preliminary model-architecture appendix is available as reusable LaTeX in
+[`docs/whitepaper/appendix-model-architecture-content.tex`](docs/whitepaper/appendix-model-architecture-content.tex),
+with a standalone wrapper and compiled PDF for visual review.
+
 ## API
 
 Create a job:

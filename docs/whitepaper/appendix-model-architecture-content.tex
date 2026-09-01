@@ -1,0 +1,225 @@
+\appendix
+\section{Arquitectura local de modelos}
+\label{app:model-architecture}
+
+Youtube2knowledge separa el procesamiento en dos redes especializadas. NVIDIA
+Parakeet RNNT Multilingual convierte audio en texto; Qwen2.5-7B-Instruct
+transforma la transcripción en preguntas y respuestas. Después de descargar los
+artefactos, ambas inferencias permanecen en la DGX Spark.
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[
+    node distance=5mm,
+    box/.style={draw=YTwoInk!22, rounded corners=2mm, minimum height=13mm,
+      text width=23mm, align=center, fill=YTwoPaper, font=\sffamily\small},
+    engine/.style={box, fill=YTwoBlue!9, draw=YTwoBlue!55},
+    model/.style={box, fill=YTwoPurple!9, draw=YTwoPurple!55},
+    arrow/.style={-{Latex[length=2.5mm]}, line width=0.8pt, draw=YTwoMuted}
+  ]
+    \node[box] (url) {URL de\\YouTube};
+    \node[box, right=of url] (media) {yt-dlp\\+ FFmpeg};
+    \node[engine, right=of media] (asr) {Silero +\\Sortformer +\\Parakeet 1.1B};
+    \node[box, right=of asr] (text) {Transcripción\\multilingüe};
+    \node[model, right=of text] (llm) {Qwen2.5\\7.61B en vLLM};
+    \node[box, right=of llm] (qa) {Preguntas Wh-\\y respuestas};
+    \draw[arrow] (url) -- (media);
+    \draw[arrow] (media) -- (asr);
+    \draw[arrow] (asr) -- (text);
+    \draw[arrow] (text) -- (llm);
+    \draw[arrow] (llm) -- (qa);
+  \end{tikzpicture}
+  }
+  \caption{Pipeline local desde el video hasta el material de estudio.}
+  \label{fig:local-pipeline}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Modelos principales desplegados en la GB10.}
+  \label{tab:deployed-models}
+  \begin{tabularx}{\textwidth}{@{}l l r l X@{}}
+    \toprule
+    Etapa & Modelo & Parámetros & Precisión & Responsabilidad \\
+    \midrule
+    Voz a texto & Parakeet RNNT Multilingual & 1.1B & FP16 &
+      Reconocimiento de voz en 25 idiomas y variantes. \\
+    Texto a conocimiento & Qwen2.5-7B-Instruct & 7.61B & BF16 &
+      Generación estructurada de preguntas Wh- y respuestas. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Anatomía de Qwen2.5-7B-Instruct}
+
+Qwen2.5-7B-Instruct es un Transformer \emph{decoder-only}. Su configuración
+publicada especifica 28 bloques, dimensión oculta de 3,584, dimensión intermedia
+de 18,944, 28 cabezas de consulta, cuatro cabezas Key/Value y vocabulario de
+152,064 tokens. La variante cargada por vLLM usa BF16 y un contexto operativo de
+32,768 tokens.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    node distance=4mm,
+    flow/.style={-{Latex[length=2.5mm]}, line width=0.8pt, draw=YTwoMuted},
+    op/.style={draw=YTwoInk!22, rounded corners=2mm, minimum width=43mm,
+      minimum height=10mm, align=center, fill=YTwoPaper, font=\sffamily\small},
+    attn/.style={op, fill=YTwoCyan!10, draw=YTwoCyan!60},
+    mlp/.style={op, fill=YTwoPurple!10, draw=YTwoPurple!60},
+    residual/.style={op, fill=YTwoGreen!9, draw=YTwoGreen!55}
+  ]
+    \node[op] (input) {Vector por token: 3,584 valores};
+    \node[op, below=of input] (norm1) {RMSNorm};
+    \node[attn, below=of norm1] (attention) {Grouped Query Attention\\28 Q heads, 4 KV heads};
+    \node[residual, below=of attention] (res1) {Suma residual};
+    \node[op, below=of res1] (norm2) {RMSNorm};
+    \node[mlp, below=of norm2] (ffn) {MLP SwiGLU\\3,584 $\rightarrow$ 18,944 $\rightarrow$ 3,584};
+    \node[residual, below=of ffn] (res2) {Suma residual};
+    \node[op, below=of res2] (output) {Salida hacia el siguiente bloque};
+
+    \draw[flow] (input) -- (norm1);
+    \draw[flow] (norm1) -- (attention);
+    \draw[flow] (attention) -- (res1);
+    \draw[flow] (res1) -- (norm2);
+    \draw[flow] (norm2) -- (ffn);
+    \draw[flow] (ffn) -- (res2);
+    \draw[flow] (res2) -- (output);
+    \draw[flow, rounded corners=2mm] (input.east) -- ++(13mm,0) |- (res1.east);
+    \draw[flow, rounded corners=2mm] (res1.west) -- ++(-13mm,0) |- (res2.west);
+
+    \node[draw=YTwoAmber!60, rounded corners=2mm,
+      fit=(norm1)(attention)(res1)(norm2)(ffn)(res2), inner sep=5mm] {};
+    \node[font=\sffamily\small, text=YTwoAmber, above=7mm of input]
+      {Un bloque Transformer, repetido 28 veces};
+  \end{tikzpicture}
+  \caption{Flujo interno simplificado de un bloque Qwen2.5.}
+  \label{fig:qwen-block}
+\end{figure}
+
+La atención relaciona posiciones de la transcripción. La MLP transforma cada
+posición de manera no lineal y concentra la mayor parte de los parámetros. El
+conocimiento no está guardado como registros independientes: emerge de patrones
+distribuidos entre estas matrices.
+
+\section{Distribución de parámetros y pesos}
+
+Cada parámetro BF16 ocupa dos bytes. Por ello, 7.6156 mil millones de parámetros
+requieren cerca de 15.23 GB decimales, o 14.19 GiB, antes de activaciones y
+cachés de inferencia.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[x=0.92cm,y=1cm,font=\sffamily\small]
+    \def\W{16}
+    \fill[YTwoBlue!72] (0,0) rectangle (1.144,1.05);
+    \fill[YTwoCyan!72] (1.144,0) rectangle (2.870,1.05);
+    \fill[YTwoPurple!78] (2.870,0) rectangle (14.854,1.05);
+    \fill[YTwoGreen!72] (14.854,0) rectangle (16,1.05);
+    \node[white, align=center, font=\sffamily\scriptsize] at (0.572,0.525) {Emb.\\7.15\%};
+    \node[white, align=center, font=\sffamily\scriptsize] at (2.007,0.525) {Atención\\10.79\%};
+    \node[white, align=center] at (8.862,0.525) {MLP SwiGLU: 74.89\%};
+    \node[white, align=center, font=\sffamily\scriptsize] at (15.427,0.525) {Salida\\7.15\%};
+
+    \draw[YTwoInk!35] (0,-0.18) -- (16,-0.18);
+    \node[anchor=north west, text=YTwoMuted] at (0,-0.30)
+      {0.545B / 1.09 GB};
+    \node[anchor=north, text=YTwoMuted] at (2.2,-0.78)
+      {0.822B / 1.64 GB};
+    \node[anchor=north, text=YTwoMuted] at (8.9,-0.30)
+      {5.703B / 11.41 GB};
+    \node[anchor=north east, text=YTwoMuted] at (16,-0.30)
+      {0.545B / 1.09 GB};
+  \end{tikzpicture}
+  \caption{Distribución aproximada de los 7.61B parámetros de Qwen2.5-7B-Instruct.}
+  \label{fig:qwen-weights}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Cálculo de parámetros principales.}
+  \label{tab:qwen-parameter-math}
+  \begin{tabularx}{\textwidth}{@{}l X r r@{}}
+    \toprule
+    Componente & Forma conceptual & Parámetros & BF16 aprox. \\
+    \midrule
+    Embedding & $152{,}064 \times 3{,}584$ & 0.545B & 1.09 GB \\
+    Atención, 28 capas & Q, K, V y proyección de salida & 0.822B & 1.64 GB \\
+    MLP, 28 capas & Gate, Up y Down & 5.703B & 11.41 GB \\
+    Cabeza de salida & $3{,}584 \times 152{,}064$ & 0.545B & 1.09 GB \\
+    \midrule
+    Total & Incluye normas y sesgos menores & 7.616B & 15.23 GB \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Un bloque contiene alrededor de 29.4M parámetros de atención y 203.7M de MLP,
+para un total cercano a 233.1M. Los 28 bloques reúnen aproximadamente 6.53B
+parámetros. La tabla de embeddings y la cabeza de salida no comparten pesos en
+esta configuración.
+
+\section{Memoria durante la inferencia}
+
+Los pesos son sólo una parte del uso de memoria. vLLM también mantiene
+activaciones temporales, áreas de trabajo CUDA, grafos compilados y la caché KV.
+Esta última evita recalcular Keys y Values de todos los tokens anteriores cuando
+el modelo genera el siguiente token.
+
+Con cuatro cabezas KV, dimensión de cabeza 128, 28 capas y BF16, el coste ideal
+por token es aproximadamente:
+
+\begin{equation}
+  2\;\text{(K,V)} \times 4\;\text{cabezas} \times 128 \times
+  28\;\text{capas} \times 2\;\text{bytes}
+  = 57{,}344\;\text{bytes/token}.
+\end{equation}
+
+Una secuencia de 32,768 tokens requiere cerca de 1.88 GB decimales de KV antes
+de considerar concurrencia y alineamientos internos. Grouped Query Attention
+reduce esta cifra porque 28 cabezas Query comparten sólo cuatro grupos KV.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    mem/.style={rounded corners=2mm, minimum height=14mm, align=center,
+      font=\sffamily\small, draw=YTwoInk!22},
+    note/.style={font=\sffamily\scriptsize, text=YTwoMuted, align=center}
+  ]
+    \node[mem, fill=YTwoPurple!12, minimum width=50mm] (weights)
+      {Pesos BF16\\15.23 GB fijos};
+    \node[mem, fill=YTwoCyan!12, minimum width=40mm, right=5mm of weights] (kv)
+      {Caché KV\\crece con tokens};
+    \node[mem, fill=YTwoGreen!12, minimum width=44mm, right=5mm of kv] (runtime)
+      {Activaciones + CUDA\\uso dinámico};
+    \node[note, below=3mm of weights] {Se cargan una vez};
+    \node[note, below=3mm of kv] {Aprox. 1.88 GB a 32K\\para una secuencia};
+    \node[note, below=3mm of runtime] {Compilación, grafos\\y áreas de trabajo};
+    \node[draw=YTwoAmber!60, rounded corners=2mm,
+      fit=(weights)(kv)(runtime), inner sep=5mm,
+      label={[font=\sffamily\small, text=YTwoAmber]above:Límite operativo de vLLM: 35\% de memoria GPU}] {};
+  \end{tikzpicture}
+  \caption{Categorías de memoria del servicio LLM. El límite es un techo, no un consumo constante.}
+  \label{fig:runtime-memory}
+\end{figure}
+
+\section{Estado de validación}
+
+La cadena de modelos alcanzó los siguientes hitos en la DGX Spark GB10:
+
+\begin{itemize}
+  \item Parakeet respondió correctamente a una transcripción de muestra por la API HTTP de NVIDIA NIM.
+  \item El perfil NIM seleccionado corresponde a DGX Spark, FP16, modo offline multilingüe, VAD Silero y diarización Sortformer.
+  \item Qwen2.5-7B-Instruct se cargó en BF16 con FlashAttention 2 mediante vLLM 0.28.0.
+  \item El servidor vLLM informó \texttt{Application startup complete} y respondió \texttt{200 OK} en \texttt{/health}.
+  \item Los puertos de ASR y LLM permanecen enlazados a loopback; FastAPI actúa como orquestador local.
+\end{itemize}
+
+\section{Fuentes técnicas}
+
+{\small NVIDIA,
+\href{https://build.nvidia.com/nvidia/parakeet-1_1b-rnnt-multilingual-asr/modelcard}{Parakeet 1.1B RNNT Multilingual ASR Model Card};
+Qwen Team,
+\href{https://huggingface.co/Qwen/Qwen2.5-7B-Instruct}{Qwen2.5-7B-Instruct Model Card};
+y Qwen Team,
+\href{https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/raw/main/config.json}{Qwen2.5-7B-Instruct configuration}.}

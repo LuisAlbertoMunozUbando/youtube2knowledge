@@ -1,5 +1,7 @@
 import json
 import re
+import unicodedata
+from collections import Counter
 
 import httpx
 
@@ -23,7 +25,8 @@ def build_prompt(transcript: str, request: CreateJobRequest) -> str:
 
     return f"""You are an educational question generator. Use only the supplied transcript.
 
-Generate exactly {request.questions_per_type} questions for each selected question type:
+Generate up to {request.questions_per_type} well-supported questions for each
+selected question type:
 {types}
 
 Also answer every custom question when the transcript contains enough evidence:
@@ -35,6 +38,8 @@ Write questions and answers in {language}.
 Rules:
 - Every answer must be supported by the transcript; never invent facts.
 - Evidence must be a short verbatim excerpt from the transcript.
+- Omit a selected question type when the transcript has no evidence for it.
+- Returning fewer questions is always better than returning an unsupported answer.
 - If a custom question cannot be answered, say so explicitly and use an empty evidence string.
 - The `type` field must be one selected type or `Custom`.
 - Return JSON only, matching this shape:
@@ -57,6 +62,40 @@ def _extract_json(raw: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise QuestionGenerationError("The model response must be a JSON object")
     return parsed
+
+
+def _normalize_quote(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(normalized.split())
+
+
+def _validate_grounding(
+    questions: list[GeneratedQuestion],
+    transcript: str,
+    request: CreateJobRequest,
+) -> None:
+    normalized_transcript = _normalize_quote(transcript)
+    counts = Counter(item.type for item in questions)
+    excessive = {
+        question_type: count
+        for question_type, count in counts.items()
+        if question_type != "Custom" and count > request.questions_per_type
+    }
+    if excessive:
+        raise QuestionGenerationError(f"Model returned too many questions: {excessive}")
+
+    for item in questions:
+        evidence = _normalize_quote(item.evidence)
+        if not evidence:
+            if item.type == "Custom":
+                continue
+            raise QuestionGenerationError(
+                f"Model returned an ungrounded {item.type} question"
+            )
+        if evidence not in normalized_transcript:
+            raise QuestionGenerationError(
+                f"Model evidence for {item.type} is not present in the transcript"
+            )
 
 
 def generate_questions(
@@ -113,4 +152,7 @@ def generate_questions(
     invalid = {item.type for item in questions} - allowed
     if invalid:
         raise QuestionGenerationError(f"Model returned unrequested types: {sorted(invalid)}")
+    if not questions:
+        raise QuestionGenerationError("The model returned no grounded questions")
+    _validate_grounding(questions, transcript, request)
     return questions

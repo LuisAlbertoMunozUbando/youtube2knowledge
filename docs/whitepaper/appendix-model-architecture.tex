@@ -1,0 +1,68 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=22mm]{geometry}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+\usetikzlibrary{arrows.meta,positioning,calc,fit}
+
+\definecolor{YTwoBlue}{HTML}{2563EB}
+\definecolor{YTwoCyan}{HTML}{0891B2}
+\definecolor{YTwoGreen}{HTML}{059669}
+\definecolor{YTwoAmber}{HTML}{D97706}
+\definecolor{YTwoPurple}{HTML}{7C3AED}
+\definecolor{YTwoInk}{HTML}{172033}
+\definecolor{YTwoMuted}{HTML}{5F6B7A}
+\definecolor{YTwoPaper}{HTML}{F5F7FA}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Youtube2knowledge}
+\rhead{Anexo técnico preliminar}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.65em}
+\setlength{\headheight}{14pt}
+\renewcommand{\figurename}{Figura}
+\renewcommand{\tablename}{Tabla}
+
+\begin{document}
+
+\pagenumbering{roman}
+\begin{titlepage}
+  \color{YTwoInk}
+  \vspace*{28mm}
+  {\sffamily\bfseries\fontsize{29}{34}\selectfont
+    Arquitectura local de inferencia\\[3mm]
+    para Youtube2knowledge\par}
+  \vspace{10mm}
+  {\sffamily\Large Anexo técnico de modelos, Transformer y memoria\par}
+  \vspace{18mm}
+  \begin{tikzpicture}
+    \fill[YTwoBlue] (0,0) rectangle (4.0,0.18);
+    \fill[YTwoCyan] (4.0,0) rectangle (7.2,0.18);
+    \fill[YTwoPurple] (7.2,0) rectangle (10.8,0.18);
+    \fill[YTwoGreen] (10.8,0) rectangle (15.0,0.18);
+  \end{tikzpicture}
+  \vfill
+  {\sffamily\large NVIDIA DGX Spark GB10\par}
+  {\sffamily\color{YTwoMuted}
+    Parakeet RNNT Multilingual + Qwen2.5-7B-Instruct + vLLM\par}
+  \vspace{8mm}
+  {\sffamily\color{YTwoMuted}Estado documentado: ASR y LLM saludables\par}
+\end{titlepage}
+
+\pagenumbering{arabic}
+\input{docs/whitepaper/appendix-model-architecture-content.tex}
+
+\end{document}
