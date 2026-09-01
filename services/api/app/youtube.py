@@ -75,7 +75,7 @@ def download_audio(url: str, destination: Path) -> Path:
             "bestaudio/best",
             "-x",
             "--audio-format",
-            "mp3",
+            "flac",
             "--audio-quality",
             "5",
             "-o",
@@ -84,7 +84,7 @@ def download_audio(url: str, destination: Path) -> Path:
         ],
         timeout=1800,
     )
-    audio_path = destination / "audio.mp3"
+    audio_path = destination / "audio.flac"
     if not audio_path.is_file() or audio_path.stat().st_size == 0:
         raise YouTubeError("Audio extraction produced no file")
     return audio_path

@@ -16,7 +16,7 @@ def test_nvidia_nim_transcription_requires_no_api_key(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    audio = tmp_path / "audio.mp3"
+    audio = tmp_path / "audio.flac"
     audio.write_bytes(b"audio")
     captured: dict[str, object] = {}
 
@@ -37,11 +37,14 @@ def test_nvidia_nim_transcription_requires_no_api_key(
     assert result == "Local NVIDIA transcript"
     assert captured["url"] == "http://asr:9000/v1/audio/transcriptions"
     assert captured["headers"] == {}
-    assert captured["data"] == {"enable_automatic_punctuation": "true"}
+    assert captured["data"] == {
+        "enable_automatic_punctuation": "true",
+        "language": "multi",
+    }
 
 
 def test_nvidia_nim_maps_spanish_language(tmp_path: Path, monkeypatch) -> None:
-    audio = tmp_path / "audio.mp3"
+    audio = tmp_path / "audio.flac"
     audio.write_bytes(b"audio")
     captured: dict[str, object] = {}
 

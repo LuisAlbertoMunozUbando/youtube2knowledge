@@ -15,7 +15,9 @@ services:
       NGC_API_KEY: ${NGC_API_KEY}
       NIM_HTTP_API_PORT: 9000
       NIM_GRPC_API_PORT: 50051
-      NIM_TAGS_SELECTOR: diarizer=disabled,mode=ofl,type=default,vad=silero
+      # Exact DGX Spark multilingual offline profile family. Pinning the GB10
+      # tags avoids NIM selecting an A100/H100-compatible profile.
+      NIM_TAGS_SELECTOR: gpu=dgx_spark,gpu_device=2e12:10de,mode=ofl,model_type=prebuilt,type=default,vad=silero,diarizer=sortformer
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:50051:50051"

@@ -49,13 +49,14 @@ def _transcribe_openai(audio_path: Path, settings: Settings, language: str) -> s
 
 def _transcribe_nvidia_nim(audio_path: Path, settings: Settings, language: str) -> str:
     """Transcribe through the NVIDIA Speech NIM offline HTTP endpoint."""
-    language_codes = {"en": "en-US", "es": "es-ES"}
+    language_codes = {"auto": "multi", "en": "en-US", "es": "es-ES"}
     chunks = _audio_chunks(audio_path)
     transcripts: list[str] = []
     for chunk in chunks:
-        data: dict[str, str] = {"enable_automatic_punctuation": "true"}
-        if language in language_codes:
-            data["language"] = language_codes[language]
+        data: dict[str, str] = {
+            "enable_automatic_punctuation": "true",
+            "language": language_codes.get(language, "multi"),
+        }
         headers = {}
         if settings.transcription_api_key:
             headers["Authorization"] = f"Bearer {settings.transcription_api_key}"
@@ -64,7 +65,7 @@ def _transcribe_nvidia_nim(audio_path: Path, settings: Settings, language: str) 
                 f"{settings.transcription_api_base_url.rstrip('/')}/audio/transcriptions",
                 headers=headers,
                 data=data,
-                files={"file": (chunk.name, audio_file, "audio/mpeg")},
+                files={"file": (chunk.name, audio_file, "audio/flac")},
                 timeout=1800,
             )
         if response.is_error:
@@ -84,7 +85,7 @@ def _audio_chunks(audio_path: Path) -> list[Path]:
         return [audio_path]
     chunk_dir = audio_path.parent / "chunks"
     chunk_dir.mkdir(exist_ok=True)
-    output = chunk_dir / "chunk-%03d.mp3"
+    output = chunk_dir / f"chunk-%03d{audio_path.suffix}"
     try:
         subprocess.run(
             [
@@ -107,7 +108,7 @@ def _audio_chunks(audio_path: Path) -> list[Path]:
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         raise TranscriptionError("Unable to split audio for transcription") from exc
-    chunks = sorted(chunk_dir.glob("chunk-*.mp3"))
+    chunks = sorted(chunk_dir.glob(f"chunk-*{audio_path.suffix}"))
     if not chunks:
         raise TranscriptionError("Audio splitting produced no chunks")
     return chunks

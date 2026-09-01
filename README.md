@@ -140,6 +140,10 @@ The ASR and LLM ports bind only to loopback. Only FastAPI port `8020` is intende
 for publication through Cloudflare Tunnel. The initial model download and NIM
 optimization can take 30 minutes or longer.
 
+The ASR service is pinned to the prebuilt multilingual offline profile for the
+DGX Spark GB10. Audio is normalized to FLAC, a format supported by Speech NIM,
+before it is submitted for transcription.
+
 ## API
 
 Create a job:
