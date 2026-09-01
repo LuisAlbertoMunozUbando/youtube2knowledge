@@ -142,7 +142,8 @@ optimization can take 30 minutes or longer.
 
 The ASR service is pinned to the prebuilt multilingual offline profile for the
 DGX Spark GB10. Audio is normalized to FLAC, a format supported by Speech NIM,
-before it is submitted for transcription.
+before it is submitted for transcription. A one-shot Compose initializer makes
+the persistent NIM cache writable before the ASR container starts.
 
 ## API
 

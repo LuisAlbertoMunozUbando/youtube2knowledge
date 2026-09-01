@@ -30,6 +30,18 @@ services:
       timeout: 10s
       retries: 60
       start_period: 30m
+    depends_on:
+      nim-cache-init:
+        condition: service_completed_successfully
+
+  nim-cache-init:
+    image: nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual:latest
+    user: "0:0"
+    entrypoint: ["/bin/bash", "-c"]
+    command: "chmod 0777 /opt/nim/.cache"
+    volumes:
+      - youtube2knowledge-nim-cache:/opt/nim/.cache
+    restart: "no"
 
   llm:
     image: vllm/vllm-openai:latest
