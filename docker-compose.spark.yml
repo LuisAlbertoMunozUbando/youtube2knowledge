@@ -53,6 +53,10 @@ services:
       stack: 67108864
     environment:
       HF_TOKEN: ${HF_TOKEN:-}
+      # hf-xet can fail while reconstructing large model files on some
+      # networks. Force huggingface_hub to use its regular HTTP downloader.
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_DOWNLOAD_TIMEOUT: "120"
     command:
       - --model
       - ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
