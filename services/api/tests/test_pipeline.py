@@ -85,3 +85,42 @@ async def test_pipeline_persists_failure(
     assert failed.stage == JobStage.FAILED
     assert failed.error == "Video unavailable"
     assert not (settings.work_dir / "abc123").exists()
+
+
+@pytest.mark.asyncio
+async def test_generation_retry_reuses_saved_transcript(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(app_data_dir=tmp_path, transcription_provider="openai")
+    store = JobStore(settings.jobs_dir)
+    failed_record = record()
+    failed_record.stage = JobStage.FAILED
+    failed_record.progress = 75
+    failed_record.transcript = "Saved source transcript"
+    failed_record.error = "Previous grounding failure"
+    store.create(failed_record)
+
+    monkeypatch.setattr(
+        "app.pipeline.generate_questions",
+        lambda *args: [
+            GeneratedQuestion(
+                type="What",
+                question="What was saved?",
+                answer="The source transcript.",
+                evidence="Saved source transcript",
+            )
+        ],
+    )
+
+    pipeline = JobPipeline(settings, store)
+    queued = pipeline.queue_generation_retry("abc123")
+    await pipeline.run_generation("abc123")
+
+    completed = store.get("abc123")
+    assert queued.stage == JobStage.GENERATING
+    assert queued.error is None
+    assert completed.stage == JobStage.COMPLETED
+    assert completed.progress == 100
+    assert completed.transcript == "Saved source transcript"
+    assert completed.questions[0].evidence == "Saved source transcript"

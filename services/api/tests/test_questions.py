@@ -3,6 +3,8 @@ import pytest
 from app.models import CreateJobRequest, GeneratedQuestion, QuestionType
 from app.providers.questions import (
     QuestionGenerationError,
+    _align_evidence,
+    _align_question_evidence,
     _extract_json,
     _validate_grounding,
     build_prompt,
@@ -87,3 +89,43 @@ def test_allows_unanswered_custom_question() -> None:
         )
     ]
     _validate_grounding(questions, "A short transcript.", request())
+
+
+def test_aligns_noisy_model_quote_to_exact_transcript_excerpt() -> None:
+    transcript = (
+        "NVIDIA DLSS Five introduces 3D guided neural rendering, an AI model "
+        "designed to bring real-time graphics closer."
+    )
+    noisy_evidence = (
+        "Nvidia theelsis five introduces tres d guided neurorendering, un ai "
+        "model designed to bring real time graphics closer."
+    )
+
+    aligned = _align_evidence(noisy_evidence, transcript)
+
+    assert aligned == transcript.removesuffix(".")
+
+
+def test_drops_question_when_evidence_cannot_be_aligned() -> None:
+    questions = [
+        GeneratedQuestion(
+            type="Why",
+            question="Why is the system private?",
+            answer="Because all data remains local.",
+            evidence="All private data remains on the device.",
+        ),
+        GeneratedQuestion(
+            type="What",
+            question="What does the system run?",
+            answer="AI models.",
+            evidence="The system runs AI models.",
+        ),
+    ]
+
+    aligned = _align_question_evidence(
+        questions,
+        "The system runs AI models.",
+    )
+
+    assert [item.type for item in aligned] == ["What"]
+    assert aligned[0].evidence == "The system runs AI models"

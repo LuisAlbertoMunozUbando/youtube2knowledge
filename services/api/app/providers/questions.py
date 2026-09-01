@@ -2,6 +2,7 @@ import json
 import re
 import unicodedata
 from collections import Counter
+from difflib import SequenceMatcher
 
 import httpx
 
@@ -67,6 +68,93 @@ def _extract_json(raw: str) -> dict[str, object]:
 def _normalize_quote(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return " ".join(normalized.split())
+
+
+def _alignment_tokens(value: str) -> list[str]:
+    return re.findall(r"\w+", _normalize_quote(value), flags=re.UNICODE)
+
+
+def _align_evidence(evidence: str, transcript: str) -> str | None:
+    evidence_tokens = _alignment_tokens(evidence)
+    transcript_matches = list(re.finditer(r"\w+", transcript, flags=re.UNICODE))
+    transcript_tokens = [
+        _normalize_quote(match.group())
+        for match in transcript_matches
+    ]
+    if not evidence_tokens or not transcript_tokens:
+        return None
+
+    evidence_text = " ".join(evidence_tokens)
+    evidence_length = len(evidence_tokens)
+    minimum_length = max(1, evidence_length - 4)
+    maximum_length = min(len(transcript_tokens), evidence_length + 4)
+    best: tuple[float, float, int, int] | None = None
+
+    transcript_positions: dict[str, list[int]] = {}
+    for index, token in enumerate(transcript_tokens):
+        transcript_positions.setdefault(token, []).append(index)
+    shared_tokens = sorted(
+        (
+            (len(transcript_positions[token]), evidence_index, token)
+            for evidence_index, token in enumerate(evidence_tokens)
+            if token in transcript_positions
+        ),
+        key=lambda item: item[0],
+    )
+    if not shared_tokens:
+        return None
+    candidate_starts: set[int] = set()
+    for _, evidence_index, token in shared_tokens[:6]:
+        for transcript_index in transcript_positions[token]:
+            estimated_start = transcript_index - evidence_index
+            candidate_starts.update(range(estimated_start - 4, estimated_start + 5))
+
+    for length in range(minimum_length, maximum_length + 1):
+        for start in candidate_starts:
+            if start < 0 or start + length > len(transcript_tokens):
+                continue
+            end = start + length
+            candidate_tokens = transcript_tokens[start:end]
+            candidate_text = " ".join(candidate_tokens)
+            character_score = SequenceMatcher(None, evidence_text, candidate_text).ratio()
+            if best is not None and character_score < best[0]:
+                continue
+            token_score = SequenceMatcher(None, evidence_tokens, candidate_tokens).ratio()
+            candidate = (character_score, token_score, start, end)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+
+    if best is None:
+        return None
+    character_score, token_score, start, end = best
+    if evidence_length < 5:
+        accepted = character_score >= 0.92 and token_score >= 0.80
+    else:
+        accepted = character_score >= 0.82 and token_score >= 0.60
+    if not accepted:
+        return None
+
+    return transcript[
+        transcript_matches[start].start():transcript_matches[end - 1].end()
+    ]
+
+
+def _align_question_evidence(
+    questions: list[GeneratedQuestion],
+    transcript: str,
+) -> list[GeneratedQuestion]:
+    aligned_questions: list[GeneratedQuestion] = []
+    for item in questions:
+        if not item.evidence.strip():
+            if item.type == "Custom":
+                aligned_questions.append(item)
+            continue
+        aligned_evidence = _align_evidence(item.evidence, transcript)
+        if aligned_evidence is None:
+            continue
+        item.evidence = aligned_evidence
+        aligned_questions.append(item)
+    return aligned_questions
 
 
 def _validate_grounding(
@@ -152,6 +240,7 @@ def generate_questions(
     invalid = {item.type for item in questions} - allowed
     if invalid:
         raise QuestionGenerationError(f"Model returned unrequested types: {sorted(invalid)}")
+    questions = _align_question_evidence(questions, transcript)
     if not questions:
         raise QuestionGenerationError("The model returned no grounded questions")
     _validate_grounding(questions, transcript, request)

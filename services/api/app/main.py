@@ -4,7 +4,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .models import CreateJobRequest, JobRecord, JobResponse
+from .models import CreateJobRequest, JobRecord, JobResponse, JobStage
 from .pipeline import JobPipeline
 from .store import JobStore
 from .youtube import YouTubeError, extract_video_id
@@ -51,3 +51,23 @@ def get_job(job_id: str) -> JobResponse:
         return JobResponse.from_record(store.get(job_id))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
+
+
+@app.post(
+    "/api/v1/jobs/{job_id}/retry-generation",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_generation(job_id: str, background_tasks: BackgroundTasks) -> JobResponse:
+    try:
+        record = store.get(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    if record.stage == JobStage.GENERATING:
+        raise HTTPException(status_code=409, detail="Question generation is already running")
+    if not record.transcript:
+        raise HTTPException(status_code=409, detail="The job has no saved transcript")
+
+    record = pipeline.queue_generation_retry(job_id)
+    background_tasks.add_task(pipeline.run_generation, job_id)
+    return JobResponse.from_record(record)

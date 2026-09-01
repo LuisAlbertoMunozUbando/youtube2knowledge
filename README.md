@@ -173,6 +173,10 @@ curl -X POST http://localhost:8000/api/v1/jobs \
 Poll `GET /api/v1/jobs/{id}`. Stages are `queued`, `downloading`,
 `transcribing`, `generating`, `completed`, and `failed`.
 
+If a job fails during question grounding after its transcript was saved, retry
+only the LLM stage with `POST /api/v1/jobs/{id}/retry-generation`. The API
+reuses the stored transcript and does not download or transcribe the video again.
+
 ## Deployment
 
 - Set the Vercel project root to `apps/web`.

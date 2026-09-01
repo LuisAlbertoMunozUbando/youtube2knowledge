@@ -75,3 +75,28 @@ class JobPipeline:
                 self._update(record, JobStage.FAILED, record.progress, "Processing failed")
             finally:
                 shutil.rmtree(work_dir, ignore_errors=True)
+
+    def queue_generation_retry(self, job_id: str) -> JobRecord:
+        record = self.store.get(job_id)
+        if not record.transcript:
+            raise ValueError("The job has no saved transcript")
+        record.error = None
+        self._update(record, JobStage.GENERATING, 75, "Regenerating grounded questions")
+        return record
+
+    async def run_generation(self, job_id: str) -> None:
+        async with self._semaphore:
+            record = self.store.get(job_id)
+            try:
+                if not record.transcript:
+                    raise ValueError("The job has no saved transcript")
+                record.questions = await self._blocking(
+                    generate_questions,
+                    record.transcript,
+                    record.request,
+                    self.settings,
+                )
+                self._update(record, JobStage.COMPLETED, 100, "Knowledge set ready")
+            except Exception as exc:
+                record.error = str(exc)
+                self._update(record, JobStage.FAILED, record.progress, "Processing failed")
