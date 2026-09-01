@@ -1,0 +1,17 @@
+[Unit]
+Description=Youtube2knowledge API
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/youtube2knowledge
+ExecStart=/usr/bin/docker compose up api
+ExecStop=/usr/bin/docker compose stop api
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
