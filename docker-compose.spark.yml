@@ -47,6 +47,11 @@ services:
     image: vllm/vllm-openai:latest
     runtime: nvidia
     gpus: all
+    # The host resolver can sinkhole huggingface.co as 0.0.0.0. Keep the
+    # override scoped to model downloads instead of changing Spark globally.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     ipc: host
     ulimits:
       memlock: -1

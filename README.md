@@ -145,7 +145,9 @@ DGX Spark GB10. Audio is normalized to FLAC, a format supported by Speech NIM,
 before it is submitted for transcription. A one-shot Compose initializer makes
 the persistent NIM cache writable before the ASR container starts. The vLLM
 service disables Hugging Face Xet downloads and uses the standard HTTP path to
-avoid CAS reconstruction failures while fetching model weights.
+avoid CAS reconstruction failures while fetching model weights. Its DNS
+override is scoped to the LLM container so a host-level sinkhole response for
+`huggingface.co` cannot block model downloads or alter other Spark services.
 
 ## API
 
