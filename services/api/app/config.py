@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     def work_dir(self) -> Path:
         return self.app_data_dir / "work"
 
+    @property
+    def drive_outbox_dir(self) -> Path:
+        return self.app_data_dir / "drive-outbox"
+
 
 @lru_cache
 def get_settings() -> Settings:

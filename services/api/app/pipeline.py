@@ -3,6 +3,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
+from .archive import archive_job
 from .config import Settings
 from .models import JobRecord, JobStage
 from .providers.questions import generate_questions
@@ -69,6 +70,12 @@ class JobPipeline:
                     record.request,
                     self.settings,
                 )
+                self._update(record, JobStage.ARCHIVING, 90, "Archiving evidence")
+                record.archive_files = await self._blocking(
+                    archive_job,
+                    record,
+                    self.settings.drive_outbox_dir,
+                )
                 self._update(record, JobStage.COMPLETED, 100, "Knowledge set ready")
             except Exception as exc:
                 record.error = str(exc)
@@ -95,6 +102,12 @@ class JobPipeline:
                     record.transcript,
                     record.request,
                     self.settings,
+                )
+                self._update(record, JobStage.ARCHIVING, 90, "Archiving evidence")
+                record.archive_files = await self._blocking(
+                    archive_job,
+                    record,
+                    self.settings.drive_outbox_dir,
                 )
                 self._update(record, JobStage.COMPLETED, 100, "Knowledge set ready")
             except Exception as exc:

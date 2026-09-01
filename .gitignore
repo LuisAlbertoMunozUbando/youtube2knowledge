@@ -18,4 +18,5 @@ coverage/
 .DS_Store
 data/jobs/*.json
 data/work/
+data/drive-outbox/
 !data/jobs/.gitkeep

@@ -63,6 +63,9 @@ async def test_pipeline_completes_and_cleans_workdir(
     assert completed.progress == 100
     assert completed.transcript == "Source transcript"
     assert len(completed.questions) == 1
+    assert len(completed.archive_files) == 2
+    for filename in completed.archive_files:
+        assert (settings.drive_outbox_dir / filename).is_file()
     assert not (settings.work_dir / "abc123").exists()
 
 
@@ -98,6 +101,10 @@ async def test_generation_retry_reuses_saved_transcript(
     failed_record.stage = JobStage.FAILED
     failed_record.progress = 75
     failed_record.transcript = "Saved source transcript"
+    failed_record.video = VideoMetadata(
+        video_id="dQw4w9WgXcQ",
+        title="Saved test video",
+    )
     failed_record.error = "Previous grounding failure"
     store.create(failed_record)
 
@@ -124,3 +131,4 @@ async def test_generation_retry_reuses_saved_transcript(
     assert completed.progress == 100
     assert completed.transcript == "Saved source transcript"
     assert completed.questions[0].evidence == "Saved source transcript"
+    assert len(completed.archive_files) == 2

@@ -15,6 +15,7 @@ export type JobStage =
   | "downloading"
   | "transcribing"
   | "generating"
+  | "archiving"
   | "completed"
   | "failed";
 
@@ -39,6 +40,7 @@ export type Job = {
   };
   transcript: string | null;
   questions: GeneratedQuestion[];
+  archive_files: string[];
   error: string | null;
   created_at: string;
   updated_at: string;

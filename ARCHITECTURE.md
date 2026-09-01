@@ -12,7 +12,7 @@ and cleanup.
 background task then advances through these persisted stages:
 
 ```text
-queued → downloading → transcribing → generating → completed
+queued → downloading → transcribing → generating → archiving → completed
                                               └──→ failed
 ```
 

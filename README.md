@@ -171,7 +171,29 @@ curl -X POST http://localhost:8000/api/v1/jobs \
 ```
 
 Poll `GET /api/v1/jobs/{id}`. Stages are `queued`, `downloading`,
-`transcribing`, `generating`, `completed`, and `failed`.
+`transcribing`, `generating`, `archiving`, `completed`, and `failed`.
+
+## Google Drive evidence archive on DGX Spark
+
+Every successful job is written first to `/data/drive-outbox` as both JSON and
+Markdown. Each pair contains the source URL and video metadata, the request,
+the complete transcript, and every generated question, answer, and exact
+evidence quote. A temporary Google Drive outage therefore cannot discard a
+completed knowledge set.
+
+The optional `drive-sync` service copies that durable outbox to the existing
+`knowledge-drive:AnswersFromYoutubeVideos` rclone destination:
+
+```bash
+docker compose --env-file .env \
+  -f docker-compose.yml \
+  -f docker-compose.spark.yml \
+  --profile drive up -d drive-sync
+```
+
+Set `RCLONE_CONFIG_PATH`, `DRIVE_REMOTE`, `DRIVE_FOLDER`, and
+`DRIVE_SYNC_INTERVAL` in `.env`; see `.env.spark.example`. The rclone config is
+mounted read-only and is never copied into the repository or image.
 
 If a job fails during question grounding after its transcript was saved, retry
 only the LLM stage with `POST /api/v1/jobs/{id}/retry-generation`. The API

@@ -81,6 +81,28 @@ services:
       retries: 60
       start_period: 20m
 
+  drive-sync:
+    image: rclone/rclone:latest
+    profiles: ["drive"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          rclone copy /data/drive-outbox "$${DRIVE_REMOTE}:$${DRIVE_FOLDER}" \
+            --config /config/rclone.conf \
+            --checksum \
+            --create-empty-src-dirs
+          sleep "$${DRIVE_SYNC_INTERVAL}"
+        done
+    environment:
+      DRIVE_REMOTE: ${DRIVE_REMOTE:-knowledge-drive}
+      DRIVE_FOLDER: ${DRIVE_FOLDER:-AnswersFromYoutubeVideos}
+      DRIVE_SYNC_INTERVAL: ${DRIVE_SYNC_INTERVAL:-60}
+    volumes:
+      - youtube2knowledge-data:/data:ro
+      - ${RCLONE_CONFIG_PATH:-/home/alberto/.config/rclone/rclone.conf}:/config/rclone.conf:ro
+    restart: unless-stopped
+
 volumes:
   youtube2knowledge-nim-cache:
   youtube2knowledge-hf-cache:

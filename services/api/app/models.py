@@ -20,6 +20,7 @@ class JobStage(StrEnum):
     DOWNLOADING = "downloading"
     TRANSCRIBING = "transcribing"
     GENERATING = "generating"
+    ARCHIVING = "archiving"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -68,6 +69,7 @@ class JobRecord(BaseModel):
     video: VideoMetadata | None = None
     transcript: str | None = None
     questions: list[GeneratedQuestion] = Field(default_factory=list)
+    archive_files: list[str] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -81,6 +83,7 @@ class JobResponse(BaseModel):
     video: VideoMetadata | None = None
     transcript: str | None = None
     questions: list[GeneratedQuestion] = Field(default_factory=list)
+    archive_files: list[str] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime
     updated_at: datetime
