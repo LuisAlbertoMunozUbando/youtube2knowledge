@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4.1-mini"
     llm_timeout_seconds: int = 180
+    llm_max_tokens: int = 4096
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -41,8 +42,10 @@ class Settings(BaseSettings):
     @field_validator("transcription_provider")
     @classmethod
     def supported_transcriber(cls, value: str) -> str:
-        if value not in {"local_whisper", "openai"}:
-            raise ValueError("TRANSCRIPTION_PROVIDER must be local_whisper or openai")
+        if value not in {"local_whisper", "nvidia_nim", "openai"}:
+            raise ValueError(
+                "TRANSCRIPTION_PROVIDER must be local_whisper, nvidia_nim, or openai"
+            )
         return value
 
     @property

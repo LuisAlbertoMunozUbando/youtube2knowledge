@@ -43,9 +43,12 @@ create-job endpoint.
 Transcription is selected by `TRANSCRIPTION_PROVIDER`:
 
 - `openai`: HTTP multipart transcription; audio larger than 20 MB is segmented.
+- `nvidia_nim`: NVIDIA Speech NIM offline HTTP transcription. Local NIM
+  deployments do not require an application API key.
 - `local_whisper`: `faster-whisper`, configured by model, device, and compute
   type.
 
 Question generation calls `/chat/completions`. It first requests JSON mode and
 retries without `response_format` when a compatible provider does not implement
-that option. The returned shape is validated before it reaches the browser.
+that option. Authorization is omitted for local endpoints when `LLM_API_KEY` is
+empty. The returned shape is validated before it reaches the browser.

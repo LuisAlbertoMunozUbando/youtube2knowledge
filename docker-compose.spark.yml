@@ -1,0 +1,63 @@
+services:
+  api:
+    depends_on:
+      asr:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+
+  asr:
+    image: nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual:latest
+    runtime: nvidia
+    gpus: all
+    shm_size: 8gb
+    environment:
+      NGC_API_KEY: ${NGC_API_KEY}
+      NIM_HTTP_API_PORT: 9000
+      NIM_GRPC_API_PORT: 50051
+      NIM_TAGS_SELECTOR: diarizer=disabled,mode=ofl,type=default,vad=silero
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:50051:50051"
+    volumes:
+      - youtube2knowledge-nim-cache:/opt/nim/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/v1/health/ready')"]
+      interval: 30s
+      timeout: 10s
+      retries: 60
+      start_period: 30m
+
+  llm:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    gpus: all
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    command:
+      - --model
+      - ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - --max-model-len
+      - "32768"
+      - --gpu-memory-utilization
+      - "0.35"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - youtube2knowledge-hf-cache:/root/.cache/huggingface/hub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 60
+      start_period: 20m
+
+volumes:
+  youtube2knowledge-nim-cache:
+  youtube2knowledge-hf-cache:

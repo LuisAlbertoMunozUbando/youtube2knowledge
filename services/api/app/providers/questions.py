@@ -64,13 +64,14 @@ def generate_questions(
     request: CreateJobRequest,
     settings: Settings,
 ) -> list[GeneratedQuestion]:
-    if not settings.llm_api_key:
-        raise QuestionGenerationError("LLM_API_KEY is not configured")
     endpoint = f"{settings.llm_api_base_url.rstrip('/')}/chat/completions"
-    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    headers: dict[str, str] = {}
+    if settings.llm_api_key:
+        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
     payload = {
         "model": settings.llm_model,
         "temperature": 0.2,
+        "max_tokens": settings.llm_max_tokens,
         "response_format": {"type": "json_object"},
         "messages": [
             {

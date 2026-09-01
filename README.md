@@ -120,6 +120,26 @@ docker compose up --build
 The compose deployment publishes the API on port `8020` by default. Change
 `API_PORT` only if that port is already assigned.
 
+### NVIDIA DGX Spark
+
+The Spark deployment keeps transcription and question generation on the GB10:
+
+- NVIDIA Speech NIM with Parakeet 1.1B RNNT Multilingual for ASR.
+- vLLM with an OpenAI-compatible local endpoint for question generation.
+- The FastAPI service remains a lightweight orchestrator and does not need
+  direct GPU access.
+
+Copy `.env.spark.example` to `.env`, add an NGC API key, authenticate Docker to
+`nvcr.io`, and launch the Spark override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.spark.yml up -d --build
+```
+
+The ASR and LLM ports bind only to loopback. Only FastAPI port `8020` is intended
+for publication through Cloudflare Tunnel. The initial model download and NIM
+optimization can take 30 minutes or longer.
+
 ## API
 
 Create a job:

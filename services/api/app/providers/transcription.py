@@ -13,6 +13,8 @@ class TranscriptionError(RuntimeError):
 def transcribe(audio_path: Path, settings: Settings, language: str = "auto") -> str:
     if settings.transcription_provider == "openai":
         return _transcribe_openai(audio_path, settings, language)
+    if settings.transcription_provider == "nvidia_nim":
+        return _transcribe_nvidia_nim(audio_path, settings, language)
     return _transcribe_local(audio_path, settings, language)
 
 
@@ -42,6 +44,37 @@ def _transcribe_openai(audio_path: Path, settings: Settings, language: str) -> s
     transcript = "\n\n".join(transcripts)
     if not transcript:
         raise TranscriptionError("Transcription API returned an empty transcript")
+    return transcript
+
+
+def _transcribe_nvidia_nim(audio_path: Path, settings: Settings, language: str) -> str:
+    """Transcribe through the NVIDIA Speech NIM offline HTTP endpoint."""
+    language_codes = {"en": "en-US", "es": "es-ES"}
+    chunks = _audio_chunks(audio_path)
+    transcripts: list[str] = []
+    for chunk in chunks:
+        data: dict[str, str] = {"enable_automatic_punctuation": "true"}
+        if language in language_codes:
+            data["language"] = language_codes[language]
+        headers = {}
+        if settings.transcription_api_key:
+            headers["Authorization"] = f"Bearer {settings.transcription_api_key}"
+        with chunk.open("rb") as audio_file:
+            response = httpx.post(
+                f"{settings.transcription_api_base_url.rstrip('/')}/audio/transcriptions",
+                headers=headers,
+                data=data,
+                files={"file": (chunk.name, audio_file, "audio/mpeg")},
+                timeout=1800,
+            )
+        if response.is_error:
+            raise TranscriptionError(f"NVIDIA Speech NIM returned {response.status_code}")
+        text = str(response.json().get("text") or "").strip()
+        if text:
+            transcripts.append(text)
+    transcript = "\n\n".join(transcripts)
+    if not transcript:
+        raise TranscriptionError("NVIDIA Speech NIM returned an empty transcript")
     return transcript
 
 
