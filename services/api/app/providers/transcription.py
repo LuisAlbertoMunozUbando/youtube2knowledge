@@ -10,6 +10,12 @@ class TranscriptionError(RuntimeError):
     pass
 
 
+def _response_error(service: str, response: httpx.Response) -> TranscriptionError:
+    detail = response.text.strip().replace("\n", " ")[:500]
+    suffix = f": {detail}" if detail else ""
+    return TranscriptionError(f"{service} returned {response.status_code}{suffix}")
+
+
 def transcribe(audio_path: Path, settings: Settings, language: str = "auto") -> str:
     if settings.transcription_provider == "openai":
         return _transcribe_openai(audio_path, settings, language)
@@ -33,11 +39,11 @@ def _transcribe_openai(audio_path: Path, settings: Settings, language: str) -> s
                 f"{settings.transcription_api_base_url.rstrip('/')}/audio/transcriptions",
                 headers=headers,
                 data=data,
-                files={"file": (chunk.name, audio_file, "audio/mpeg")},
+                files={"file": (chunk.name, audio_file, "audio/wav")},
                 timeout=1800,
             )
         if response.is_error:
-            raise TranscriptionError(f"Transcription API returned {response.status_code}")
+            raise _response_error("Transcription API", response)
         text = str(response.json().get("text") or "").strip()
         if text:
             transcripts.append(text)
@@ -65,11 +71,11 @@ def _transcribe_nvidia_nim(audio_path: Path, settings: Settings, language: str) 
                 f"{settings.transcription_api_base_url.rstrip('/')}/audio/transcriptions",
                 headers=headers,
                 data=data,
-                files={"file": (chunk.name, audio_file, "audio/flac")},
+                files={"file": (chunk.name, audio_file, "audio/wav")},
                 timeout=1800,
             )
         if response.is_error:
-            raise TranscriptionError(f"NVIDIA Speech NIM returned {response.status_code}")
+            raise _response_error("NVIDIA Speech NIM", response)
         text = str(response.json().get("text") or "").strip()
         if text:
             transcripts.append(text)

@@ -68,23 +68,53 @@ def inspect_video(url: str, max_minutes: int) -> VideoMetadata:
 
 def download_audio(url: str, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
-    output_template = str(destination / "audio.%(ext)s")
+    output_template = str(destination / "source.%(ext)s")
     _run_yt_dlp(
         [
             "-f",
             "bestaudio/best",
-            "-x",
-            "--audio-format",
-            "flac",
-            "--audio-quality",
-            "5",
             "-o",
             output_template,
             url,
         ],
         timeout=1800,
     )
-    audio_path = destination / "audio.flac"
+    sources = sorted(
+        path
+        for path in destination.glob("source.*")
+        if path.is_file() and path.suffix != ".part"
+    )
+    if len(sources) != 1:
+        raise YouTubeError("Audio download produced an unexpected file set")
+
+    audio_path = destination / "audio.wav"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(sources[0]),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                str(audio_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise YouTubeError("Audio normalization to WAV failed") from exc
+
     if not audio_path.is_file() or audio_path.stat().st_size == 0:
         raise YouTubeError("Audio extraction produced no file")
     return audio_path

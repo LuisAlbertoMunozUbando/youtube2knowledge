@@ -1,12 +1,16 @@
 from pathlib import Path
 
 from app.config import Settings
-from app.providers.transcription import _transcribe_nvidia_nim
+from app.providers.transcription import (
+    _response_error,
+    _transcribe_nvidia_nim,
+)
 
 
 class FakeResponse:
     is_error = False
     status_code = 200
+    text = ""
 
     def json(self) -> dict[str, str]:
         return {"text": "Local NVIDIA transcript"}
@@ -16,7 +20,7 @@ def test_nvidia_nim_transcription_requires_no_api_key(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    audio = tmp_path / "audio.flac"
+    audio = tmp_path / "audio.wav"
     audio.write_bytes(b"audio")
     captured: dict[str, object] = {}
 
@@ -41,10 +45,11 @@ def test_nvidia_nim_transcription_requires_no_api_key(
         "enable_automatic_punctuation": "true",
         "language": "multi",
     }
+    assert captured["files"]["file"][2] == "audio/wav"
 
 
 def test_nvidia_nim_maps_spanish_language(tmp_path: Path, monkeypatch) -> None:
-    audio = tmp_path / "audio.flac"
+    audio = tmp_path / "audio.wav"
     audio.write_bytes(b"audio")
     captured: dict[str, object] = {}
 
@@ -64,3 +69,16 @@ def test_nvidia_nim_maps_spanish_language(tmp_path: Path, monkeypatch) -> None:
         "enable_automatic_punctuation": "true",
         "language": "es-ES",
     }
+
+
+def test_transcription_error_preserves_response_detail() -> None:
+    response = FakeResponse()
+    response.is_error = True
+    response.status_code = 400
+    response.text = '{"detail":"Only WAV audio is accepted"}'
+
+    error = _response_error("NVIDIA Speech NIM", response)
+
+    assert str(error) == (
+        'NVIDIA Speech NIM returned 400: {"detail":"Only WAV audio is accepted"}'
+    )
