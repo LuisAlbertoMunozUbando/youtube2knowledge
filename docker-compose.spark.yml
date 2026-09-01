@@ -37,8 +37,8 @@ services:
   nim-cache-init:
     image: nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual:latest
     user: "0:0"
-    entrypoint: ["/bin/bash", "-c"]
-    command: "chmod 0777 /opt/nim/.cache"
+    entrypoint: ["chmod"]
+    command: ["0777", "/opt/nim/.cache"]
     volumes:
       - youtube2knowledge-nim-cache:/opt/nim/.cache
     restart: "no"
