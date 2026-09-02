@@ -27,6 +27,16 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "name": "Youtube2knowledge API",
+        "status": "ok",
+        "health": "/healthz",
+        "app": "https://youtube2knowledge-five.vercel.app/",
+    }
+
+
 @app.get("/healthz")
 def health() -> dict[str, str]:
     return {"status": "ok"}
