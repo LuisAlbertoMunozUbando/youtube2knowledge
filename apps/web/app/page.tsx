@@ -2,17 +2,20 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  ApiError,
   createJob,
   getJob,
   Job,
   QUESTION_TYPES,
   QuestionType,
+  retryGeneration,
 } from "@/lib/api";
 
 const INITIAL_TYPES: QuestionType[] = ["What", "How", "Why"];
 const GITHUB_URL =
   process.env.NEXT_PUBLIC_GITHUB_URL ||
   "https://github.com/LuisAlbertoMunozUbando/youtube2knowledge";
+const LAST_JOB_KEY = "youtube2knowledge:last-job-id";
 
 function duration(seconds: number | null): string {
   if (!seconds) return "";
@@ -31,27 +34,62 @@ export default function Home() {
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const running = job && !["completed", "failed"].includes(job.stage);
 
   useEffect(() => {
-    if (!job || !running) return;
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const updated = await getJob(job.id);
-        if (!cancelled) setJob(updated);
-      } catch (pollError) {
-        if (!cancelled) {
-          setError(pollError instanceof Error ? pollError.message : "Unable to check progress");
+    const savedJobId = window.localStorage.getItem(LAST_JOB_KEY);
+    if (!savedJobId) return;
+
+    void getJob(savedJobId)
+      .then((savedJob) => {
+        if (!cancelled) setJob(savedJob);
+      })
+      .catch((restoreError) => {
+        if (restoreError instanceof ApiError && restoreError.status === 404) {
+          window.localStorage.removeItem(LAST_JOB_KEY);
+          return;
         }
-      }
-    }, 1800);
+        if (!cancelled) {
+          setError("Unable to restore the last job yet. Reload to try again.");
+        }
+      });
+
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [job, running]);
+  }, []);
+
+  useEffect(() => {
+    if (!job || !running) return;
+    let cancelled = false;
+    const jobId = job.id;
+
+    async function poll() {
+      try {
+        const updated = await getJob(jobId);
+        if (!cancelled) {
+          setJob(updated);
+          setError(null);
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          const message =
+            pollError instanceof Error ? pollError.message : "Unable to check progress";
+          setError(`${message}. Progress checks will continue automatically.`);
+        }
+      }
+    }
+
+    void poll();
+    const timer = window.setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [job?.id, running]);
 
   const groupedQuestions = useMemo(() => {
     const groups = new Map<string, Job["questions"]>();
@@ -92,10 +130,26 @@ export default function Home() {
         output_language: language,
       });
       setJob(created);
+      window.localStorage.setItem(LAST_JOB_KEY, created.id);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to start processing");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleRetryGeneration() {
+    if (!job) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      const retried = await retryGeneration(job.id);
+      setJob(retried);
+      window.localStorage.setItem(LAST_JOB_KEY, retried.id);
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Unable to retry generation");
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -239,13 +293,37 @@ export default function Home() {
                   <p className="statusLabel">{job.stage}</p>
                   <h2>{job.video?.title || job.message}</h2>
                   {job.video && (
-                    <p>{[job.video.channel, duration(job.video.duration_seconds)].filter(Boolean).join(" · ")}</p>
+                    <p>
+                      {[job.video.channel, duration(job.video.duration_seconds)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      {" · "}
+                      <a
+                        className="sourceLink"
+                        href={url || `https://youtu.be/${job.video.video_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Source ↗
+                      </a>
+                    </p>
                   )}
                 </div>
                 <strong>{job.progress}%</strong>
               </div>
               <div className="progressTrack"><span style={{ width: `${job.progress}%` }} /></div>
               <p className="statusMessage">{job.error || job.message}</p>
+              {job.stage === "failed" && job.transcript && (
+                <button
+                  className="retryButton"
+                  type="button"
+                  onClick={handleRetryGeneration}
+                  disabled={retrying}
+                >
+                  {retrying ? "Retrying…" : "Retry question generation"}
+                  <span aria-hidden="true">↻</span>
+                </button>
+              )}
             </div>
 
             {job.stage === "completed" && (
@@ -259,6 +337,16 @@ export default function Home() {
                     Download JSON ↓
                   </button>
                 </div>
+
+                {job.archive_files.length > 0 && (
+                  <div className="archiveNotice">
+                    <span aria-hidden="true">✓</span>
+                    <p>
+                      Evidence package archived
+                      <small>JSON and Markdown are queued for Google Drive.</small>
+                    </p>
+                  </div>
+                )}
 
                 {[...groupedQuestions.entries()].map(([type, questions]) => (
                   <section className="questionSection" key={type}>

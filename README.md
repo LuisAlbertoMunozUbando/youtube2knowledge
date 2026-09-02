@@ -19,6 +19,10 @@ Project: <https://github.com/LuisAlbertoMunozUbando/youtube2knowledge>
 The model is instructed to use only the transcript and every generated answer
 includes a short source excerpt.
 
+The browser remembers the latest job across refreshes, keeps polling after
+temporary network errors, and can retry question generation from the saved
+transcript without downloading the video again.
+
 ## Architecture
 
 ```text

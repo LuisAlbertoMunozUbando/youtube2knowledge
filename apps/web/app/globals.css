@@ -91,10 +91,29 @@ textarea { resize: vertical; line-height: 1.5; }
 .progressTrack { background: #3c3c35; height: 3px; margin-top: 26px; }
 .progressTrack span { display: block; height: 100%; background: var(--lime); transition: width .5s ease; }
 .statusMessage { font-size: 12px; color: #bbb9b0; margin: 12px 0 0; }
+.sourceLink { color: inherit; text-underline-offset: 3px; }
+.sourceLink:hover { color: white; }
+.retryButton {
+  display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-top: 20px;
+  border: 1px solid #696960; background: transparent; color: white; padding: 12px 15px;
+  cursor: pointer; min-width: 250px;
+}
+.retryButton:hover:not(:disabled) { border-color: var(--lime); color: var(--lime); }
+.retryButton:disabled { opacity: .55; cursor: wait; }
 .resultsHeader { display: flex; justify-content: space-between; align-items: end; margin: 76px 0 42px; }
 .resultsHeader h2 { font-size: clamp(34px, 5vw, 58px); letter-spacing: -.05em; margin: 15px 0 0; }
 .downloadButton { border: 1px solid var(--ink); background: transparent; padding: 12px 15px; cursor: pointer; }
 .downloadButton:hover { background: var(--ink); color: white; }
+.archiveNotice {
+  display: flex; align-items: center; gap: 13px; border: 1px solid #becf75;
+  background: rgba(217, 242, 116, .24); padding: 14px 16px; margin: -22px 0 38px;
+}
+.archiveNotice > span {
+  display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px;
+  border-radius: 50%; background: var(--ink); color: var(--lime); font-size: 12px;
+}
+.archiveNotice p { margin: 0; font-weight: 650; font-size: 13px; }
+.archiveNotice small { display: block; color: var(--muted); font-weight: 450; margin-top: 3px; }
 .typeHeading { display: flex; align-items: center; gap: 18px; margin: 44px 0 18px; }
 .typeHeading span { font-family: Georgia, serif; font-style: italic; font-size: 27px; color: var(--signal); }
 .typeHeading i { height: 1px; background: var(--line); flex: 1; }

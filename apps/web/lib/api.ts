@@ -60,10 +60,25 @@ const API_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
   "",
 );
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function parseResponse(response: Response): Promise<Job> {
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(body?.detail || `Request failed (${response.status})`);
+    const body = (await response.json().catch(() => null)) as
+      | { detail?: string | Array<{ msg?: string }> }
+      | null;
+    const detail = Array.isArray(body?.detail)
+      ? body.detail.map((item) => item.msg).filter(Boolean).join("; ")
+      : body?.detail;
+    throw new ApiError(detail || `Request failed (${response.status})`, response.status);
   }
   return response.json() as Promise<Job>;
 }
@@ -79,5 +94,12 @@ export async function createJob(payload: CreateJob): Promise<Job> {
 
 export async function getJob(jobId: string): Promise<Job> {
   const response = await fetch(`${API_URL}/api/v1/jobs/${jobId}`, { cache: "no-store" });
+  return parseResponse(response);
+}
+
+export async function retryGeneration(jobId: string): Promise<Job> {
+  const response = await fetch(`${API_URL}/api/v1/jobs/${jobId}/retry-generation`, {
+    method: "POST",
+  });
   return parseResponse(response);
 }
