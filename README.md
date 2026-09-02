@@ -205,6 +205,7 @@ reuses the stored transcript and does not download or transcribe the video again
 
 ## Deployment
 
+- Connect Vercel to this GitHub repository and deploy the `main` branch.
 - Set the Vercel project root to `apps/web`.
 - Run the API container on Spark with a persistent `/data` volume. Its default
   host port is `8020`, separate from the existing Research Knowledge API.
