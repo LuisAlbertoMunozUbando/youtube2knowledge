@@ -1,100 +1,182 @@
 # Youtube2knowledge
 
-Turn a YouTube video into a transcript and a grounded set of questions and
-answers. Choose the question lenses you care about, add focus keywords, and ask
-your own questions.
+<div align="center">
 
-Project: <https://github.com/LuisAlbertoMunozUbando/youtube2knowledge>
+### Video in. Understanding out.
 
-## What it does
+Turn any public YouTube video into a transcript and a grounded set of questions,
+answers, and source evidence - powered locally by an NVIDIA DGX Spark.
 
-1. Validates a single YouTube video URL.
-2. Extracts its audio with `yt-dlp` and `ffmpeg`.
-3. Transcribes it with local Whisper or a transcription API.
-4. Generates evidence-backed questions for any selection of:
-   **What, Which, Where, When, How, Why, Who, Whose**.
-5. Answers custom questions and prioritizes user-provided keywords.
-6. Returns a downloadable JSON knowledge set and the source transcript.
+[![Live App](https://img.shields.io/badge/Live_App-Open_Youtube2knowledge-000000?style=for-the-badge&logo=vercel)](https://youtube2knowledge.albertomunoz.ai/)
+[![CI](https://img.shields.io/github/actions/workflow/status/LuisAlbertoMunozUbando/youtube2knowledge/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/LuisAlbertoMunozUbando/youtube2knowledge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
+[![NVIDIA DGX Spark](https://img.shields.io/badge/NVIDIA-DGX_Spark-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/products/workstations/dgx-spark/)
 
-The model is instructed to use only the transcript and every generated answer
-includes a short source excerpt.
+[Try the live app](https://youtube2knowledge.albertomunoz.ai/) ·
+[Explore the API](#api) ·
+[Run on DGX Spark](#run-on-nvidia-dgx-spark) ·
+[Read the full whitepaper](output/pdf/whitepaper-youtube2knowledge.pdf) ·
+[LaTeX source](docs/whitepaper/whitepaper-youtube2knowledge.tex)
 
-The browser remembers the latest job across refreshes, keeps polling after
-temporary network errors, and can retry question generation from the saved
-transcript without downloading the video again.
+</div>
 
-## Architecture
+---
 
-```text
-Browser
-  └─ Next.js web app (Vercel)
-       └─ FastAPI job API (Spark through Cloudflare Tunnel)
-            ├─ yt-dlp + ffmpeg
-            ├─ Whisper local or transcription API
-            └─ OpenAI-compatible LLM (OpenAI, NVIDIA NIM, etc.)
+## Why Youtube2knowledge?
+
+Watching a video is easy. Turning it into reusable, verifiable knowledge is not.
+Youtube2knowledge performs the entire journey in one workflow:
+
+1. Paste a YouTube URL.
+2. Extract and normalize the audio.
+3. Transcribe it with NVIDIA Speech NIM.
+4. Choose the question lenses you care about.
+5. Generate answers grounded in the transcript.
+6. Preserve the source, transcript, answers, and evidence in Google Drive.
+
+The result is not a generic summary. Every generated answer includes the exact
+transcript excerpt used as evidence.
+
+## Highlights
+
+| Capability | What it gives you |
+| --- | --- |
+| **Eight Wh- lenses** | What, Which, Where, When, How, Why, Who, and Whose |
+| **Custom questions** | Ask your own questions about the video |
+| **Keyword focus** | Guide the model toward topics that matter to you |
+| **Grounded answers** | Every answer carries a source excerpt from the transcript |
+| **Local AI** | ASR and question generation run on the NVIDIA DGX Spark GPU |
+| **Resilient jobs** | Refresh-safe polling, atomic state, and generation-only retries |
+| **Portable results** | Download the complete knowledge set as JSON |
+| **Durable archive** | JSON and Markdown evidence packages sync to Google Drive |
+
+## How it works
+
+```mermaid
+flowchart TD
+    A["Paste a YouTube URL"] --> B["Download and normalize audio"]
+    B --> C["Transcribe with Parakeet 1.1B"]
+    C --> D["Generate grounded Q&A with Qwen2.5 7B"]
+    D --> E["Review, download, and archive evidence"]
 ```
 
-Media processing deliberately stays outside Vercel and Cloudflare Workers. It
-is long-running, needs `ffmpeg`, and can require GPU access. The API persists
-job state as atomic JSON files so browser polling survives page refreshes and
-normal application restarts.
+The browser lets you select any combination of Wh- question types, add keywords,
+include custom questions, choose the output language, and control how many
+questions are generated per type.
 
-## Repository
+## Production architecture
 
-```text
-apps/web/             Next.js 16 interface
-services/api/         FastAPI processing service
-deploy/cloudflare/    Tunnel and edge guidance
-deploy/systemd/       Spark service unit
-.github/workflows/    CI for API and web
+```mermaid
+flowchart TD
+    Browser["Browser"] --> Web["Next.js 16 on Vercel"]
+    Web --> Edge["Cloudflare Tunnel"]
+    Edge --> API["FastAPI job orchestrator"]
+    API --> GPU["DGX Spark: Parakeet + Qwen"]
+    API --> Archive["Evidence outbox + Google Drive"]
 ```
 
-## Quick start
+| Layer | Technology | Responsibility |
+| --- | --- | --- |
+| Web | Next.js 16, TypeScript, Vercel | Input, polling, recovery, and results |
+| Edge | Cloudflare Tunnel | Secure public route to the Spark API |
+| API | FastAPI, Pydantic, `yt-dlp`, FFmpeg | Validation, durable jobs, media processing |
+| Speech | NVIDIA Speech NIM, Parakeet 1.1B | GPU-accelerated multilingual transcription |
+| Reasoning | vLLM, Qwen2.5-7B-Instruct | Evidence-backed question and answer generation |
+| Archive | Atomic JSON, Markdown, rclone, Drive | Durable records in `AnswersFromYoutubeVideos` |
+
+Long-running media and GPU work deliberately stays outside Vercel. Only the web
+interface is serverless; the AI pipeline runs on the Spark, where FFmpeg, model
+weights, GPU memory, and persistent job data are available.
+
+## AI models
+
+| Model | Size | Role |
+| --- | ---: | --- |
+| NVIDIA Parakeet 1.1B RNNT Multilingual | 1.1B parameters | Multilingual speech recognition |
+| Qwen2.5-7B-Instruct | 7B parameters | Structured questions, answers, and evidence |
+
+Qwen is served through an OpenAI-compatible vLLM endpoint with a 32,768-token
+context window. Parakeet uses the DGX Spark GB10-compatible multilingual offline
+profile. Internal model ports bind only to loopback; the public edge exposes only
+the FastAPI service.
+
+For a deeper look at weights, transformer execution, attention, KV cache, and GPU
+memory, see the [model-architecture appendix](output/pdf/appendix-model-architecture.pdf).
+
+## Repository map
+
+```text
+youtube2knowledge/
+├── apps/web/                Next.js 16 web application
+├── services/api/            FastAPI processing service and tests
+├── deploy/cloudflare/       Cloudflare Tunnel guidance
+├── deploy/systemd/          Spark service unit
+├── docs/whitepaper/         LaTeX technical documentation
+├── docker-compose.yml       Base services
+├── docker-compose.spark.yml DGX Spark GPU override
+└── .github/workflows/       API and frontend CI
+```
+
+## Run on NVIDIA DGX Spark
 
 ### Requirements
 
-- Node.js 24+
-- Python 3.11+
-- `ffmpeg`
-- An OpenAI-compatible chat endpoint
-- A transcription provider, either API-based or local Whisper
+- NVIDIA DGX Spark or compatible `aarch64` NVIDIA system
+- NVIDIA Container Toolkit and working `docker run --gpus all`
+- Docker Compose
+- NVIDIA NGC API key with access to the Speech NIM image
+- At least 30 GB of free disk space for images, weights, and caches
 
-### Configure
+### 1. Configure
+
+```bash
+cp .env.spark.example .env
+```
+
+Populate `NGC_API_KEY` in `.env`. Optionally add `HF_TOKEN` for authenticated
+Hugging Face downloads. Never commit the populated `.env` file.
+
+```bash
+docker login nvcr.io --username '$oauthtoken'
+```
+
+### 2. Validate
+
+```bash
+docker compose \
+  --env-file .env \
+  -f docker-compose.yml \
+  -f docker-compose.spark.yml \
+  config --quiet
+```
+
+### 3. Start
+
+```bash
+docker compose \
+  --env-file .env \
+  -f docker-compose.yml \
+  -f docker-compose.spark.yml \
+  up -d --build
+```
+
+The first start can take 30 minutes or longer while NIM and Hugging Face artifacts
+are downloaded and optimized.
+
+| Local endpoint | Purpose |
+| --- | --- |
+| `http://127.0.0.1:8020/healthz` | FastAPI health |
+| `http://127.0.0.1:9000/v1/health/ready` | NVIDIA Speech NIM readiness |
+| `http://127.0.0.1:8001/health` | vLLM readiness |
+
+## Run locally without the Spark profile
 
 ```bash
 cp .env.example .env
+docker compose up --build
 ```
 
-For API transcription, set:
-
-```dotenv
-TRANSCRIPTION_PROVIDER=openai
-TRANSCRIPTION_API_KEY=...
-```
-
-For local Whisper:
-
-```bash
-cd services/api
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev,local-whisper]"
-```
-
-Then set `TRANSCRIPTION_PROVIDER=local_whisper`. `WHISPER_DEVICE`,
-`WHISPER_MODEL`, and `WHISPER_COMPUTE_TYPE` control the runtime.
-
-Configure question generation with any OpenAI-compatible endpoint:
-
-```dotenv
-LLM_API_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=...
-LLM_MODEL=gpt-4.1-mini
-```
-
-### Run locally
-
-API:
+Or run the services directly:
 
 ```bash
 cd services/api
@@ -104,132 +186,138 @@ pip install -e ".[dev]"
 uvicorn app.main:app --reload
 ```
 
-Web:
-
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. API documentation is available at
-`http://localhost:8000/docs` outside production.
-
-Alternatively, run both services:
-
-```bash
-docker compose up --build
-```
-
-The compose deployment publishes the API on port `8020` by default. Change
-`API_PORT` only if that port is already assigned.
-
-### NVIDIA DGX Spark
-
-The Spark deployment keeps transcription and question generation on the GB10:
-
-- NVIDIA Speech NIM with Parakeet 1.1B RNNT Multilingual for ASR.
-- vLLM with an OpenAI-compatible local endpoint for question generation.
-- The FastAPI service remains a lightweight orchestrator and does not need
-  direct GPU access.
-
-Copy `.env.spark.example` to `.env`, add an NGC API key, authenticate Docker to
-`nvcr.io`, and launch the Spark override:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.spark.yml up -d --build
-```
-
-The ASR and LLM ports bind only to loopback. Only FastAPI port `8020` is intended
-for publication through Cloudflare Tunnel. The initial model download and NIM
-optimization can take 30 minutes or longer.
-
-The ASR service is pinned to the prebuilt multilingual offline profile for the
-DGX Spark GB10. Audio is normalized to mono 16 kHz PCM WAV, the input format
-validated against Speech NIM, before transcription. A one-shot initializer makes
-the persistent NIM cache writable before the ASR container starts. The vLLM
-service disables Hugging Face Xet downloads and uses the standard HTTP path to
-avoid CAS reconstruction failures while fetching model weights. Its DNS
-override is scoped to the LLM container so a host-level sinkhole response for
-`huggingface.co` cannot block model downloads or alter other Spark services.
-
-The preliminary model-architecture appendix is available as reusable LaTeX in
-[`docs/whitepaper/appendix-model-architecture-content.tex`](docs/whitepaper/appendix-model-architecture-content.tex),
-with a standalone wrapper and compiled PDF for visual review.
+Open `http://localhost:3000`. Outside production, API documentation is available
+at `http://localhost:8000/docs`.
 
 ## API
 
-Create a job:
+### Create a job
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/jobs \
+curl -X POST http://127.0.0.1:8020/api/v1/jobs \
   -H 'content-type: application/json' \
   -d '{
-    "youtube_url": "https://youtube.com/watch?v=VIDEO_ID",
+    "youtube_url": "https://www.youtube.com/watch?v=VIDEO_ID",
     "question_types": ["What", "How", "Why"],
     "custom_questions": ["What is the central claim?"],
-    "keywords": ["robotics", "investment"],
+    "keywords": ["robotics", "simulation"],
     "questions_per_type": 2,
     "output_language": "auto"
   }'
 ```
 
-Poll `GET /api/v1/jobs/{id}`. Stages are `queued`, `downloading`,
-`transcribing`, `generating`, `archiving`, `completed`, and `failed`.
+The API responds with `202 Accepted` and a durable job identifier.
 
-## Google Drive evidence archive on DGX Spark
-
-Every successful job is written first to `/data/drive-outbox` as both JSON and
-Markdown. Each pair contains the source URL and video metadata, the request,
-the complete transcript, and every generated question, answer, and exact
-evidence quote. A temporary Google Drive outage therefore cannot discard a
-completed knowledge set.
-
-The optional `drive-sync` service copies that durable outbox to the existing
-`knowledge-drive:AnswersFromYoutubeVideos` rclone destination:
+### Follow progress
 
 ```bash
-docker compose --env-file .env \
-  -f docker-compose.yml \
-  -f docker-compose.spark.yml \
-  --profile drive up -d drive-sync
+curl http://127.0.0.1:8020/api/v1/jobs/JOB_ID
 ```
 
-Set `RCLONE_CONFIG_PATH`, `DRIVE_REMOTE`, `DRIVE_FOLDER`, and
-`DRIVE_SYNC_INTERVAL` in `.env`; see `.env.spark.example`. The rclone config is
-mounted read-only and is never copied into the repository or image.
+```mermaid
+stateDiagram-v2
+    [*] --> queued
+    queued --> downloading
+    downloading --> transcribing
+    transcribing --> generating
+    generating --> archiving
+    archiving --> completed
+    generating --> failed
+    failed --> generating: retry generation
+```
 
-If a job fails during question grounding after its transcript was saved, retry
-only the LLM stage with `POST /api/v1/jobs/{id}/retry-generation`. The API
-reuses the stored transcript and does not download or transcribe the video again.
+If grounding fails after transcription succeeds, retry only question generation:
+
+```bash
+curl -X POST \
+  http://127.0.0.1:8020/api/v1/jobs/JOB_ID/retry-generation
+```
+
+The saved transcript is reused; the video is not downloaded or transcribed again.
+
+## Evidence and Google Drive
+
+Every completed job first writes two files to `/data/drive-outbox`:
+
+- A machine-readable JSON package.
+- A human-readable Markdown report.
+
+Each package contains the source URL, video metadata, original request, complete
+transcript, generated questions, answers, and evidence excerpts. Local outbox
+storage makes the workflow tolerant of temporary Google Drive outages.
+
+```bash
+docker compose \
+  --env-file .env \
+  -f docker-compose.yml \
+  -f docker-compose.spark.yml \
+  --profile drive \
+  up -d drive-sync
+```
+
+The default destination is `knowledge-drive:AnswersFromYoutubeVideos`. The
+rclone configuration is mounted read-only and never copied into the image.
 
 ## Deployment
 
-- Connect Vercel to this GitHub repository and deploy the `main` branch.
-- Set the Vercel project root to `apps/web`.
-- Run the API container on Spark with a persistent `/data` volume. Its default
-  host port is `8020`, separate from the existing Research Knowledge API.
-- Publish the API through Cloudflare Tunnel; see
-  [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
-- Set an exact `CORS_ORIGINS` allowlist on the API.
-- Apply an edge rate limit to `POST /api/v1/jobs` before making the app public.
-- Keep all model and transcription keys on Spark, never in Vercel.
+### Web on Vercel
 
-## Development
+- Connect this repository to Vercel and deploy `main`.
+- Set the project root to `apps/web`.
+- Set `NEXT_PUBLIC_API_BASE_URL` to the public Cloudflare API hostname.
+
+The public application is
+[youtube2knowledge.albertomunoz.ai](https://youtube2knowledge.albertomunoz.ai/).
+Vercel also retains the technical deployment hostname
+[youtube2knowledge-five.vercel.app](https://youtube2knowledge-five.vercel.app/).
+
+### API through Cloudflare
+
+- Run the API on Spark with a persistent `/data` volume.
+- Publish only port `8020` through Cloudflare Tunnel.
+- Add the exact frontend origin to `CORS_ORIGINS`.
+- Apply an edge rate limit to `POST /api/v1/jobs` before broad public use.
+- Keep NGC, Hugging Face, model, and Drive credentials on Spark.
+
+See [the Cloudflare deployment guide](deploy/cloudflare/README.md).
+
+## Reliability and grounding
+
+- Atomic job state survives normal restarts.
+- The browser restores the latest job and keeps polling after transient errors.
+- Evidence is normalized and aligned back to the transcript.
+- Grounding failures can retry the LLM stage without repeating transcription.
+- Completed packages remain local until Drive synchronization succeeds.
+
+## Development and tests
 
 ```bash
 make test
 ```
 
-CI runs Ruff and Pytest for the API, then TypeScript and a production Next.js
-build for the web app.
+CI runs Ruff and Pytest for the API, then TypeScript validation and a production
+Next.js build for the web application.
 
 ## Responsible use
 
-Only process videos you are authorized to access. Youtube2knowledge does not
+Process only videos you are authorized to access. Youtube2knowledge does not
 bypass private videos, DRM, age restrictions, or platform access controls.
 Review YouTube's terms and applicable copyright rules for your use case.
 
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+Built on an NVIDIA DGX Spark - because useful AI should be fast, grounded, and yours.
+
+</div>
