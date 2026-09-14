@@ -39,19 +39,28 @@ def _markdown(record: JobRecord, archived_at: datetime) -> str:
         "",
     ]
 
-    for index, item in enumerate(record.questions, start=1):
+    if not record.questions:
         lines.extend(
             [
-                f"### {index}. {item.type}: {item.question}",
-                "",
-                item.answer,
-                "",
-                "**Evidence from transcript**",
-                "",
-                f"> {item.evidence.replace(chr(10), ' ')}",
+                "No grounded questions could be generated from the detected speech.",
+                "The transcript is preserved below for review.",
                 "",
             ]
         )
+    else:
+        for index, item in enumerate(record.questions, start=1):
+            lines.extend(
+                [
+                    f"### {index}. {item.type}: {item.question}",
+                    "",
+                    item.answer,
+                    "",
+                    "**Evidence from transcript**",
+                    "",
+                    f"> {item.evidence.replace(chr(10), ' ')}",
+                    "",
+                ]
+            )
 
     lines.extend(["## Transcript", "", record.transcript, ""])
     return "\n".join(lines)
@@ -62,8 +71,6 @@ def archive_job(record: JobRecord, destination: Path) -> list[str]:
         raise ValueError("Cannot archive a job without video metadata")
     if not record.transcript:
         raise ValueError("Cannot archive a job without a transcript")
-    if not record.questions:
-        raise ValueError("Cannot archive a job without grounded questions")
 
     destination.mkdir(parents=True, exist_ok=True)
     archived_at = datetime.now(UTC)
