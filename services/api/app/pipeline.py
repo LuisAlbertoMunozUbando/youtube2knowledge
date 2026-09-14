@@ -6,10 +6,13 @@ from pathlib import Path
 from .archive import archive_job
 from .config import Settings
 from .models import JobRecord, JobStage
-from .providers.questions import generate_questions
+from .providers.questions import QuestionGenerationError, generate_questions
 from .providers.transcription import transcribe
 from .store import JobStore
 from .youtube import download_audio, inspect_video
+
+
+NO_GROUNDED_QUESTIONS = "The model returned no grounded questions"
 
 
 class JobPipeline:
@@ -32,6 +35,28 @@ class JobPipeline:
 
     async def _blocking(self, function: Callable, *args):
         return await asyncio.to_thread(function, *args)
+
+    async def _generate_or_preserve_transcript(self, record: JobRecord) -> None:
+        """Generate grounded questions, but preserve useful transcript-only jobs.
+
+        A sparse or noisy transcript can be real evidence even when the LLM cannot
+        produce questions that pass the grounding validator.  That specific outcome
+        is not a processing failure: keep an empty question list and continue to
+        archive the transcript.  Other LLM/API errors still fail normally.
+        """
+        try:
+            record.questions = await self._blocking(
+                generate_questions,
+                record.transcript,
+                record.request,
+                self.settings,
+            )
+        except QuestionGenerationError as exc:
+            if str(exc) != NO_GROUNDED_QUESTIONS:
+                raise
+            record.questions = []
+            record.error = None
+            self.store.save(record)
 
     async def run(self, job_id: str) -> None:
         async with self._semaphore:
@@ -64,19 +89,24 @@ class JobPipeline:
                 self.store.save(record)
 
                 self._update(record, JobStage.GENERATING, 75, "Generating questions")
-                record.questions = await self._blocking(
-                    generate_questions,
-                    record.transcript,
-                    record.request,
-                    self.settings,
+                await self._generate_or_preserve_transcript(record)
+                archive_message = (
+                    "Archiving evidence"
+                    if record.questions
+                    else "Archiving transcript; no grounded questions available"
                 )
-                self._update(record, JobStage.ARCHIVING, 90, "Archiving evidence")
+                self._update(record, JobStage.ARCHIVING, 90, archive_message)
                 record.archive_files = await self._blocking(
                     archive_job,
                     record,
                     self.settings.drive_outbox_dir,
                 )
-                self._update(record, JobStage.COMPLETED, 100, "Knowledge set ready")
+                completed_message = (
+                    "Knowledge set ready"
+                    if record.questions
+                    else "Transcript ready; no grounded questions could be generated"
+                )
+                self._update(record, JobStage.COMPLETED, 100, completed_message)
             except Exception as exc:
                 record.error = str(exc)
                 self._update(record, JobStage.FAILED, record.progress, "Processing failed")
@@ -97,19 +127,24 @@ class JobPipeline:
             try:
                 if not record.transcript:
                     raise ValueError("The job has no saved transcript")
-                record.questions = await self._blocking(
-                    generate_questions,
-                    record.transcript,
-                    record.request,
-                    self.settings,
+                await self._generate_or_preserve_transcript(record)
+                archive_message = (
+                    "Archiving evidence"
+                    if record.questions
+                    else "Archiving transcript; no grounded questions available"
                 )
-                self._update(record, JobStage.ARCHIVING, 90, "Archiving evidence")
+                self._update(record, JobStage.ARCHIVING, 90, archive_message)
                 record.archive_files = await self._blocking(
                     archive_job,
                     record,
                     self.settings.drive_outbox_dir,
                 )
-                self._update(record, JobStage.COMPLETED, 100, "Knowledge set ready")
+                completed_message = (
+                    "Knowledge set ready"
+                    if record.questions
+                    else "Transcript ready; no grounded questions could be generated"
+                )
+                self._update(record, JobStage.COMPLETED, 100, completed_message)
             except Exception as exc:
                 record.error = str(exc)
                 self._update(record, JobStage.FAILED, record.progress, "Processing failed")
