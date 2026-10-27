@@ -33,10 +33,14 @@ async def test_pipeline_completes_and_cleans_workdir(
     store = JobStore(settings.jobs_dir)
     store.create(record())
 
-    def fake_inspect(\n        url: str, max_minutes: int, start_seconds: int, end_seconds: int | None\n    ) -> VideoMetadata:
+    def fake_inspect(
+        url: str, max_minutes: int, start_seconds: int, end_seconds: int | None
+    ) -> VideoMetadata:
         return VideoMetadata(video_id="dQw4w9WgXcQ", title="Test video")
 
-    def fake_download(\n        url: str, destination: Path, start_seconds: int, end_seconds: int | None\n    ) -> Path:
+    def fake_download(
+        url: str, destination: Path, start_seconds: int, end_seconds: int | None
+    ) -> Path:
         audio = destination / "audio.mp3"
         audio.write_bytes(b"audio")
         return audio
