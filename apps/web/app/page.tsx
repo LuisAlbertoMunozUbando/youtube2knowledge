@@ -32,7 +32,8 @@ export default function Home() {
   const [questionsPerType, setQuestionsPerType] = useState(2);
   const [language, setLanguage] = useState<"auto" | "en" | "es">("auto");
   const [job, setJob] = useState<Job | null>(null);
-  const [startMinute, setStartMinute] = useState(0);
+  const [startMinute, setStartMinute] = useState<number | "">("");
+  const effectiveStartMinute = startMinute === "" ? 0 : startMinute;
   const [endMinute, setEndMinute] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -114,11 +115,11 @@ export default function Home() {
       setError("Select at least one question type.");
       return;
     }
-    if (endMinute !== "" && (endMinute <= startMinute || endMinute - startMinute > 150)) {
+    if (endMinute !== "" && (endMinute <= effectiveStartMinute || endMinute - effectiveStartMinute > 150)) {
       setError("Choose an interval longer than zero and no more than 150 minutes.");
       return;
     }
-    if (endMinute === "" && startMinute > 0) {
+    if (endMinute === "" && effectiveStartMinute > 0) {
       setError("Enter an end minute when selecting a start minute.");
       return;
     }
@@ -138,7 +139,7 @@ export default function Home() {
           .filter(Boolean),
         questions_per_type: questionsPerType,
         output_language: language,
-        start_seconds: Math.round(startMinute * 60),
+        start_seconds: Math.round(effectiveStartMinute * 60),
         end_seconds: endMinute === "" ? null : Math.round(endMinute * 60),
       });
       setJob(created);
@@ -217,16 +218,16 @@ export default function Home() {
 
           <div className="fieldGroup">
             <label>Video interval (minutes)</label>
-            <p className="fieldHint">Leave the end blank to process the entire video (maximum 150 minutes). For longer videos, choose any interval up to 150 minutes.</p>
+            <p className="fieldHint">Warning: You can process at most 150 minutes per request. For videos longer than 150 minutes, select a start and end minute. Leave both fields blank to process the entire video only when it is 150 minutes or shorter.</p>
             <div className="formColumns">
               <label>Start minute
-                <input type="number" min="0" step="0.1" value={startMinute} onChange={(event) => setStartMinute(Math.max(0, Number(event.target.value)))} disabled={Boolean(running)} />
+                <input type="number" min="0" step="0.1" placeholder="Start of video" value={startMinute} onChange={(event) => setStartMinute(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))} disabled={Boolean(running)} />
               </label>
               <label>End minute
                 <input type="number" min="0.1" step="0.1" placeholder="End of video" value={endMinute} onChange={(event) => setEndMinute(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))} disabled={Boolean(running)} />
               </label>
             </div>
-            {endMinute !== "" && endMinute > startMinute && <p className="fieldHint">Processing {(endMinute - startMinute).toFixed(1)} minutes of audio.</p>}
+            {endMinute !== "" && endMinute > effectiveStartMinute && <p className="fieldHint">Processing {(endMinute - effectiveStartMinute).toFixed(1)} minutes of audio.</p>}
           </div>
 
           <div className="divider" />
