@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.youtube import YouTubeError, download_audio, extract_video_id
+from app.youtube import YouTubeError, download_audio, extract_video_id, inspect_video
 
 
 @pytest.mark.parametrize(
@@ -59,3 +59,31 @@ def test_download_audio_normalizes_to_nim_compatible_wav(
     assert ffmpeg_command[ffmpeg_command.index("-ac") + 1] == "1"
     assert ffmpeg_command[ffmpeg_command.index("-ar") + 1] == "16000"
     assert ffmpeg_command[ffmpeg_command.index("-c:a") + 1] == "pcm_s16le"
+
+
+def test_selected_interval_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    arguments = []
+    def fake_download(args, timeout):
+        arguments.extend(args)
+        (tmp_path / "source.webm").write_bytes(b"source")
+        return subprocess.CompletedProcess(args, 0, "", "")
+    def fake_ffmpeg(command, **kwargs):
+        (tmp_path / "audio.wav").write_bytes(b"wav")
+        return subprocess.CompletedProcess(command, 0, "", "")
+    monkeypatch.setattr("app.youtube._run_yt_dlp", fake_download)
+    monkeypatch.setattr("app.youtube.subprocess.run", fake_ffmpeg)
+    download_audio("https://youtu.be/dQw4w9WgXcQ", tmp_path, 2400, 3900)
+    assert "--download-sections" in arguments
+    assert "*2400-3900" in arguments
+
+
+def test_interval_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_inspect(args, timeout):
+        return subprocess.CompletedProcess(args, 0, '{"duration": 21600, "id": "dQw4w9WgXcQ"}', "")
+    monkeypatch.setattr("app.youtube._run_yt_dlp", fake_inspect)
+    video = "https://youtu.be/dQw4w9WgXcQ"
+    assert inspect_video(video, 150, 12000, 21000).duration_seconds == 21600
+    with pytest.raises(YouTubeError):
+        inspect_video(video, 150, 12000, 21100)
+    with pytest.raises(YouTubeError):
+        inspect_video(video, 150, 21000, 22000)
