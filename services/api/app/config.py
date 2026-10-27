@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_data_dir: Path = Path("./data")
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
-    max_video_minutes: int = 180
+    max_video_minutes: int = 150
     max_concurrent_jobs: int = 1
 
     transcription_provider: str = "openai"
