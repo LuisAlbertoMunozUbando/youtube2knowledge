@@ -84,13 +84,7 @@ def download_audio(
 ) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     output_template = str(destination / "source.%(ext)s")
-    download_args = [
-            "-f",
-            "bestaudio/best",
-            "-o",
-            output_template,
-            url,
-        ]
+    download_args = ["-f", "bestaudio/best", "-o", output_template, url]
     if end_seconds is not None:
         download_args = [
             "--download-sections",
