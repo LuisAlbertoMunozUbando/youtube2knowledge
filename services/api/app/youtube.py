@@ -50,13 +50,26 @@ def _run_yt_dlp(arguments: list[str], timeout: int) -> subprocess.CompletedProce
         raise YouTubeError(detail) from exc
 
 
-def inspect_video(url: str, max_minutes: int) -> VideoMetadata:
+def inspect_video(
+    url: str, max_minutes: int, start_seconds: int = 0, end_seconds: int | None = None
+) -> VideoMetadata:
     extract_video_id(url)
     result = _run_yt_dlp(["--dump-single-json", "--skip-download", url], timeout=60)
     raw = json.loads(result.stdout)
     duration = int(raw.get("duration") or 0) or None
-    if duration and duration > max_minutes * 60:
-        raise YouTubeError(f"Video exceeds the {max_minutes}-minute limit")
+    if start_seconds < 0 or (end_seconds is not None and end_seconds <= start_seconds):
+        raise YouTubeError("Invalid selected interval")
+    if end_seconds is None:
+        if start_seconds != 0:
+            raise YouTubeError("An end time is required when selecting a start time")
+        if duration and duration > max_minutes * 60:
+            raise YouTubeError(f"Select an interval of at most {max_minutes} minutes")
+    elif end_seconds - start_seconds > max_minutes * 60:
+        raise YouTubeError(f"Selected interval exceeds {max_minutes} minutes")
+    if duration is not None and (
+        start_seconds >= duration or (end_seconds is not None and end_seconds > duration)
+    ):
+        raise YouTubeError("Selected interval is outside the video duration")
     return VideoMetadata(
         video_id=str(raw.get("id") or extract_video_id(url)),
         title=str(raw.get("title") or "Untitled video"),
@@ -66,19 +79,20 @@ def inspect_video(url: str, max_minutes: int) -> VideoMetadata:
     )
 
 
-def download_audio(url: str, destination: Path) -> Path:
+def download_audio(
+    url: str, destination: Path, start_seconds: int = 0, end_seconds: int | None = None
+) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     output_template = str(destination / "source.%(ext)s")
-    _run_yt_dlp(
-        [
-            "-f",
-            "bestaudio/best",
-            "-o",
-            output_template,
-            url,
-        ],
-        timeout=1800,
-    )
+    download_args = ["-f", "bestaudio/best", "-o", output_template, url]
+    if end_seconds is not None:
+        download_args = [
+            "--download-sections",
+            f"*{start_seconds}-{end_seconds}",
+            "--force-keyframes-at-cuts",
+            *download_args,
+        ]
+    _run_yt_dlp(download_args, timeout=1800)
     sources = sorted(
         path
         for path in destination.glob("source.*")

@@ -11,7 +11,6 @@ from .providers.transcription import transcribe
 from .store import JobStore
 from .youtube import download_audio, inspect_video
 
-
 NO_GROUNDED_QUESTIONS = "The model returned no grounded questions"
 
 
@@ -69,6 +68,8 @@ class JobPipeline:
                     inspect_video,
                     str(record.request.youtube_url),
                     self.settings.max_video_minutes,
+                    record.request.start_seconds,
+                    record.request.end_seconds,
                 )
                 self.store.save(record)
 
@@ -77,6 +78,8 @@ class JobPipeline:
                     download_audio,
                     str(record.request.youtube_url),
                     work_dir,
+                    record.request.start_seconds,
+                    record.request.end_seconds,
                 )
 
                 self._update(record, JobStage.TRANSCRIBING, 45, "Transcribing audio")

@@ -53,6 +53,8 @@ export type CreateJob = {
   keywords: string[];
   questions_per_type: number;
   output_language: "auto" | "en" | "es";
+  start_seconds: number;
+  end_seconds: number | null;
 };
 
 const API_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(

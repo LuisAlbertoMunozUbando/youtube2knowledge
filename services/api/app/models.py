@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 class QuestionType(StrEnum):
@@ -32,6 +32,17 @@ class CreateJobRequest(BaseModel):
     keywords: list[str] = Field(default_factory=list, max_length=20)
     questions_per_type: int = Field(default=2, ge=1, le=5)
     output_language: str = Field(default="auto", pattern=r"^(auto|en|es)$")
+    start_seconds: int = Field(default=0, ge=0)
+    end_seconds: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        if self.end_seconds is not None:
+            if self.end_seconds <= self.start_seconds:
+                raise ValueError("End must be later than start")
+            if self.end_seconds - self.start_seconds > 150 * 60:
+                raise ValueError("Selected interval exceeds 150 minutes")
+        return self
 
     @field_validator("question_types")
     @classmethod
