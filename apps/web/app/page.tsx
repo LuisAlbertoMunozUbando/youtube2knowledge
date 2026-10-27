@@ -32,6 +32,8 @@ export default function Home() {
   const [questionsPerType, setQuestionsPerType] = useState(2);
   const [language, setLanguage] = useState<"auto" | "en" | "es">("auto");
   const [job, setJob] = useState<Job | null>(null);
+  const [startMinute, setStartMinute] = useState(0);
+  const [endMinute, setEndMinute] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -112,6 +114,14 @@ export default function Home() {
       setError("Select at least one question type.");
       return;
     }
+    if (endMinute !== "" && (endMinute <= startMinute || endMinute - startMinute > 150)) {
+      setError("Choose an interval longer than zero and no more than 150 minutes.");
+      return;
+    }
+    if (endMinute === "" && startMinute > 0) {
+      setError("Enter an end minute when selecting a start minute.");
+      return;
+    }
     setSubmitting(true);
     setJob(null);
     try {
@@ -128,6 +138,8 @@ export default function Home() {
           .filter(Boolean),
         questions_per_type: questionsPerType,
         output_language: language,
+        start_seconds: Math.round(startMinute * 60),
+        end_seconds: endMinute === "" ? null : Math.round(endMinute * 60),
       });
       setJob(created);
       window.localStorage.setItem(LAST_JOB_KEY, created.id);
@@ -201,6 +213,20 @@ export default function Home() {
                 disabled={Boolean(running)}
               />
             </div>
+          </div>
+
+          <div className="fieldGroup">
+            <label>Video interval (minutes)</label>
+            <p className="fieldHint">Leave the end blank to process the entire video (maximum 150 minutes). For longer videos, choose any interval up to 150 minutes.</p>
+            <div className="formColumns">
+              <label>Start minute
+                <input type="number" min="0" step="0.1" value={startMinute} onChange={(event) => setStartMinute(Math.max(0, Number(event.target.value)))} disabled={Boolean(running)} />
+              </label>
+              <label>End minute
+                <input type="number" min="0.1" step="0.1" placeholder="End of video" value={endMinute} onChange={(event) => setEndMinute(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))} disabled={Boolean(running)} />
+              </label>
+            </div>
+            {endMinute !== "" && endMinute > startMinute && <p className="fieldHint">Processing {(endMinute - startMinute).toFixed(1)} minutes of audio.</p>}
           </div>
 
           <div className="divider" />
