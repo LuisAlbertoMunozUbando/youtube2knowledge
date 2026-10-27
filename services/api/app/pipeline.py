@@ -69,6 +69,8 @@ class JobPipeline:
                     inspect_video,
                     str(record.request.youtube_url),
                     self.settings.max_video_minutes,
+                    record.request.start_seconds,
+                    record.request.end_seconds,
                 )
                 self.store.save(record)
 
@@ -77,6 +79,8 @@ class JobPipeline:
                     download_audio,
                     str(record.request.youtube_url),
                     work_dir,
+                    record.request.start_seconds,
+                    record.request.end_seconds,
                 )
 
                 self._update(record, JobStage.TRANSCRIBING, 45, "Transcribing audio")
