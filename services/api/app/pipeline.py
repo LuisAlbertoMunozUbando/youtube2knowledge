@@ -11,7 +11,6 @@ from .providers.transcription import transcribe
 from .store import JobStore
 from .youtube import download_audio, inspect_video
 
-
 NO_GROUNDED_QUESTIONS = "The model returned no grounded questions"
 
 
